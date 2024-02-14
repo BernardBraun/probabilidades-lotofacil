@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerador de Jogos Aleatórios</title>
+  <style>
+    .repetido {
+      color: red;
+    }
+    .novoSorteio {
+      color: green;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Gerador de Jogos Aleatórios</h1>
+  <label for="quantidadeJogos">Quantidade de Jogos (1-10): </label>
+  <input type="number" id="quantidadeJogos" min="1" max="10" value="1">
+  <button onclick="gerarJogos()">Gerar Jogos Aleatórios</button>
+  <div id="jogosGerados"></div>
+
+  <script>
+    // Variável global para armazenar resultados gerados
+    let resultadosGerados = [];
+
+    // Função para calcular a probabilidade das dezenas
+    function calcularProbabilidade(resultados) {
+      const frequencia = {};
+
+      resultados.forEach((sorteio) => {
+        sorteio.dezenasOrdemSorteio.forEach((numero) => {
+          frequencia[numero] = (frequencia[numero] || 0) + 1;
+        });
+      });
+
+      const totalSorteios = resultados.length;
+      const probabilidade = [];
+
+      for (const numero in frequencia) {
+        probabilidade.push({
+          numero: numero,
+          porcentagem: ((frequencia[numero] / totalSorteios) * 100).toFixed(2)
+        });
+      }
+
+      probabilidade.sort((a, b) => parseFloat(b.porcentagem) - parseFloat(a.porcentagem));
+
+      return probabilidade;
+    }
+
+    // Função para verificar se uma sequência já saiu em algum sorteio anterior
+    function verificarSequenciaRepetida(sequencia, resultados) {
+      for (const sorteio of resultados) {
+        const dezenasSorteadas = sorteio.dezenasOrdemSorteio.map(numero => numero.padStart(2, '0'));
+        if (sequencia.join(",") === dezenasSorteadas.join(",")) {
+          return { repetido: true, novoSorteio: false };
+        }
+      }
+      return { repetido: false, novoSorteio: true };
+    }
+
+    // Função para buscar os resultados da Lotofácil na API
+    async function buscarResultadosAPI() {
+      const urlAPI = "https://loteriascaixa-api.herokuapp.com/api/lotofacil";
+
+      try {
+        const response = await fetch(urlAPI);
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error("Erro ao buscar resultados na API:", error);
+        return [];
+      }
+    }
+
+    // Função para gerar jogos aleatórios com base nas probabilidades
+    async function gerarJogos() {
+      const quantidadeJogos = parseInt(document.getElementById("quantidadeJogos").value, 10);
+      const jogosGerados = [];
+
+      // Buscar resultados da Lotofácil na API
+      const resultadosAPI = await buscarResultadosAPI();
+
+      // Adicionar resultados da API ao array global
+      resultadosGerados = resultadosGerados.concat(resultadosAPI);
+
+      for (let i = 0; i < quantidadeJogos; i++) {
+        const jogoAleatorio = gerarJogoAleatorio();
+        jogosGerados.push(jogoAleatorio);
+      }
+
+      // Exibir os jogos gerados na página
+      const jogosGeradosDiv = document.getElementById("jogosGerados");
+      exibirJogosGerados(jogosGerados, jogosGeradosDiv);
+    }
+
+    // Função para gerar um jogo aleatório, considerando a probabilidade e verificando repetição
+    function gerarJogoAleatorio() {
+      const probabilidade = calcularProbabilidade(resultadosGerados);
+
+      const numerosDisponiveis = [];
+
+      // Criar uma lista ponderada de números disponíveis com base na probabilidade
+      for (const numero of probabilidade) {
+        const peso = Math.ceil(numero.porcentagem / 10); // Ajuste para melhorar a distribuição
+        for (let i = 0; i < peso; i++) {
+          numerosDisponiveis.push(numero.numero);
+        }
+      }
+
+      // Remover duplicatas da lista de números disponíveis
+      const numerosUnicos = [...new Set(numerosDisponiveis)];
+
+      // Embaralhar os números disponíveis
+      for (let i = numerosUnicos.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [numerosUnicos[i], numerosUnicos[j]] = [numerosUnicos[j], numerosUnicos[i]];
+      }
+
+      // Escolher os primeiros 15 números ordenados para formar um jogo
+      const sequencia = numerosUnicos.slice(0, 15).sort((a, b) => parseInt(a) - parseInt(b));
+
+      // Verificar se a sequência já saiu em algum sorteio anterior
+      const { repetido, novoSorteio } = verificarSequenciaRepetida(sequencia, resultadosGerados);
+
+      return { sequencia: sequencia, repetido: repetido, novoSorteio: novoSorteio };
+    }
+
+    // Função para atualizar a exibição das sequências geradas
+    function exibirJogosGerados(jogosGerados, jogosGeradosDiv) {
+      jogosGeradosDiv.innerHTML = "<h2>Jogos Gerados:</h2>";
+
+      for (let i = 0; i < jogosGerados.length; i++) {
+        const jogo = jogosGerados[i];
+        const classeCss = jogo.repetido ? 'repetido' : (jogo.novoSorteio ? 'novoSorteio' : '');
+        jogosGeradosDiv.innerHTML += `<p class="${classeCss}">Jogo ${i + 1}: ${jogo.sequencia.join(", ")}</p>`;
+      }
+    }
+
+  </script>
+
+</body>
+</html>
